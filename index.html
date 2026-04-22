@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Reality Check – Decision Simulator</title>
+
+  <!-- ── Fonts ─────────────────────────────────────────────────── -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=IBM+Plex+Mono:wght@300;400;500&display=swap" rel="stylesheet" />
+
+  <style>
+    /* ═══════════════════════════════════════════════════════════════
+       1. DESIGN TOKENS
+    ═══════════════════════════════════════════════════════════════ */
+    :root {
+      --bg:          #0f172a;
+      --surface:     rgba(15, 23, 42, 0.7);
+      --glass:       rgba(255, 255, 255, 0.04);
+      --glass-hover: rgba(255, 255, 255, 0.07);
+      --border:      rgba(255, 255, 255, 0.08);
+      --border-glow: rgba(99, 179, 237, 0.35);
+
+      --blue:        #63b3ed;
+      --violet:      #b794f4;
+      --cyan:        #76e4f7;
+      --rose:        #fc8181;
+      --green:       #68d391;
+
+      --grad-a:      linear-gradient(135deg, #3b82f6, #8b5cf6);
+      --grad-b:      linear-gradient(135deg, #06b6d4, #3b82f6);
+      --grad-text:   linear-gradient(90deg, #63b3ed, #b794f4 60%, #76e4f7);
+
+      --text:        #e2e8f0;
+      --muted:       #64748b;
+      --subtle:      #94a3b8;
+
+      --font-display: 'Syne', sans-serif;
+      --font-mono:    'IBM Plex Mono', monospace;
+
+      --radius-sm:   8px;
+      --radius-md:   16px;
+      --radius-lg:   24px;
+      --radius-xl:   32px;
+
+      --shadow-card: 0 8px 32px rgba(0,0,0,0.5), 0 1px 0 rgba(255,255,255,0.05) inset;
+      --shadow-glow: 0 0 40px rgba(99,179,237,0.15), 0 0 80px rgba(139,92,246,0.08);
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       2. RESET & BASE
+    ═══════════════════════════════════════════════════════════════ */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--font-mono);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      overflow-x: hidden;
+      line-height: 1.6;
+    }
+
+    /* Custom scrollbar */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: var(--bg); }
+    ::-webkit-scrollbar-thumb { background: #2d3748; border-radius: 3px; }
+
+    /* ═══════════════════════════════════════════════════════════════
+       3. PARTICLE CANVAS BACKGROUND
+    ═══════════════════════════════════════════════════════════════ */
+    #particle-canvas {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 0;
+    }
+
+    /* Gradient mesh overlays for depth */
+    .bg-orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(120px);
+      pointer-events: none;
+      z-index: 0;
+      animation: orb-drift 12s ease-in-out infinite alternate;
+    }
+    .bg-orb-1 {
+      width: 600px; height: 600px;
+      background: radial-gradient(circle, rgba(59,130,246,0.12) 0%, transparent 70%);
+      top: -200px; left: -100px;
+      animation-delay: 0s;
+    }
+    .bg-orb-2 {
+      width: 500px; height: 500px;
+      background: radial-gradient(circle, rgba(139,92,246,0.1) 0%, transparent 70%);
+      bottom: -100px; right: -50px;
+      animation-delay: -4s;
+    }
+    .bg-orb-3 {
+      width: 300px; height: 300px;
+      background: radial-gradient(circle, rgba(6,182,212,0.08) 0%, transparent 70%);
+      top: 50%; left: 50%;
+      transform: translate(-50%,-50%);
+      animation-delay: -8s;
+    }
+
+    @keyframes orb-drift {
+      0%   { transform: translate(0, 0) scale(1); }
+      100% { transform: translate(30px, 40px) scale(1.1); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       4. NAVBAR
+    ═══════════════════════════════════════════════════════════════ */
+    nav {
+      position: fixed;
+      top: 0; left: 0; right: 0;
+      z-index: 100;
+      padding: 16px 40px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: rgba(15, 23, 42, 0.8);
+      backdrop-filter: blur(20px);
+      -webkit-backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .nav-logo {
+      font-family: var(--font-display);
+      font-weight: 800;
+      font-size: 1.1rem;
+      letter-spacing: -0.02em;
+      background: var(--grad-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      text-decoration: none;
+    }
+
+    .nav-links { display: flex; align-items: center; gap: 8px; }
+
+    .nav-link {
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      color: var(--subtle);
+      text-decoration: none;
+      padding: 6px 14px;
+      border-radius: var(--radius-sm);
+      transition: color 0.2s, background 0.2s;
+      letter-spacing: 0.04em;
+    }
+    .nav-link:hover { color: var(--text); background: var(--glass); }
+
+    .nav-badge {
+      font-size: 0.65rem;
+      padding: 2px 8px;
+      border-radius: 99px;
+      background: rgba(99,179,237,0.12);
+      border: 1px solid rgba(99,179,237,0.25);
+      color: var(--blue);
+      letter-spacing: 0.08em;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       5. MAIN LAYOUT
+    ═══════════════════════════════════════════════════════════════ */
+    main {
+      position: relative;
+      z-index: 1;
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 120px 24px 80px;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       6. HERO SECTION
+    ═══════════════════════════════════════════════════════════════ */
+    .hero {
+      text-align: center;
+      margin-bottom: 64px;
+      animation: fade-up 0.8s ease both;
+    }
+
+    .hero-eyebrow {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.72rem;
+      letter-spacing: 0.14em;
+      text-transform: uppercase;
+      color: var(--blue);
+      margin-bottom: 20px;
+      padding: 6px 16px;
+      border-radius: 99px;
+      border: 1px solid rgba(99,179,237,0.2);
+      background: rgba(99,179,237,0.07);
+    }
+    .hero-eyebrow::before {
+      content: '';
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      background: var(--blue);
+      animation: pulse-dot 2s ease infinite;
+    }
+    @keyframes pulse-dot {
+      0%,100% { opacity:1; transform:scale(1); }
+      50%      { opacity:0.4; transform:scale(0.7); }
+    }
+
+    .hero h1 {
+      font-family: var(--font-display);
+      font-size: clamp(2.4rem, 6vw, 4rem);
+      font-weight: 800;
+      line-height: 1.08;
+      letter-spacing: -0.03em;
+      background: var(--grad-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 18px;
+    }
+
+    .hero-sub {
+      font-size: 0.9rem;
+      color: var(--subtle);
+      max-width: 460px;
+      margin: 0 auto;
+      line-height: 1.7;
+    }
+
+    @keyframes fade-up {
+      from { opacity:0; transform:translateY(24px); }
+      to   { opacity:1; transform:translateY(0); }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       7. INPUT CARD (SIMULATOR FORM)
+    ═══════════════════════════════════════════════════════════════ */
+    .sim-card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 40px;
+      box-shadow: var(--shadow-card);
+      backdrop-filter: blur(24px);
+      -webkit-backdrop-filter: blur(24px);
+      margin-bottom: 40px;
+      animation: fade-up 0.8s 0.15s ease both;
+      transition: box-shadow 0.3s;
+    }
+    .sim-card:focus-within {
+      box-shadow: var(--shadow-card), var(--shadow-glow);
+      border-color: var(--border-glow);
+    }
+
+    .field-label {
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    /* Situation textarea */
+    .situation-input {
+      width: 100%;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 18px 20px;
+      font-family: var(--font-mono);
+      font-size: 0.95rem;
+      color: var(--text);
+      resize: vertical;
+      min-height: 80px;
+      transition: border-color 0.2s, background 0.2s;
+      outline: none;
+    }
+    .situation-input::placeholder { color: var(--muted); }
+    .situation-input:focus {
+      border-color: rgba(99,179,237,0.4);
+      background: rgba(99,179,237,0.04);
+    }
+
+    /* Options row */
+    .options-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-top: 24px;
+    }
+
+    .option-group { position: relative; }
+
+    .option-label-tag {
+      position: absolute;
+      top: -10px; left: 14px;
+      font-size: 0.62rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      padding: 2px 8px;
+      border-radius: 4px;
+      z-index: 1;
+    }
+    .option-a-tag {
+      background: rgba(59,130,246,0.15);
+      border: 1px solid rgba(59,130,246,0.3);
+      color: var(--blue);
+    }
+    .option-b-tag {
+      background: rgba(139,92,246,0.15);
+      border: 1px solid rgba(139,92,246,0.3);
+      color: var(--violet);
+    }
+
+    .option-input {
+      width: 100%;
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 14px 16px 14px 16px;
+      font-family: var(--font-mono);
+      font-size: 0.88rem;
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s, background 0.2s;
+    }
+    .option-input::placeholder { color: var(--muted); }
+    #optionA:focus { border-color: rgba(59,130,246,0.45); background: rgba(59,130,246,0.04); }
+    #optionB:focus { border-color: rgba(139,92,246,0.45); background: rgba(139,92,246,0.04); }
+
+    /* Simulate button */
+    .simulate-btn {
+      width: 100%;
+      margin-top: 28px;
+      padding: 18px 32px;
+      font-family: var(--font-display);
+      font-size: 1rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      color: #fff;
+      background: var(--grad-a);
+      border: none;
+      border-radius: var(--radius-md);
+      cursor: pointer;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.15s, box-shadow 0.2s;
+      box-shadow: 0 4px 24px rgba(99,102,241,0.35);
+    }
+    .simulate-btn::before {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, rgba(255,255,255,0.12), transparent);
+      pointer-events: none;
+    }
+    .simulate-btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 32px rgba(99,102,241,0.5);
+    }
+    .simulate-btn:active { transform: translateY(0); }
+    .simulate-btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       8. LOADING STATE
+    ═══════════════════════════════════════════════════════════════ */
+    #loading {
+      display: none;
+      text-align: center;
+      padding: 60px 0;
+      animation: fade-up 0.4s ease both;
+    }
+
+    .loader-ring {
+      width: 64px; height: 64px;
+      border-radius: 50%;
+      border: 2px solid rgba(255,255,255,0.06);
+      border-top-color: var(--blue);
+      border-right-color: var(--violet);
+      animation: spin 1s linear infinite;
+      margin: 0 auto 24px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .loader-text {
+      font-size: 0.8rem;
+      color: var(--subtle);
+      letter-spacing: 0.08em;
+    }
+    .loader-dots::after {
+      content: '';
+      animation: dots 1.5s steps(4, end) infinite;
+    }
+    @keyframes dots {
+      0%  { content: ''; }
+      25% { content: '.'; }
+      50% { content: '..'; }
+      75% { content: '...'; }
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       9. RESULTS SECTION
+    ═══════════════════════════════════════════════════════════════ */
+    #results { display: none; }
+
+    .results-header {
+      text-align: center;
+      margin-bottom: 40px;
+      animation: fade-up 0.5s ease both;
+    }
+
+    .results-title {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      color: var(--text);
+      margin-bottom: 6px;
+    }
+    .results-sub { font-size: 0.78rem; color: var(--muted); }
+
+    /* Timeline wrapper — side-by-side options */
+    .timeline-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+      margin-bottom: 32px;
+    }
+
+    .timeline-col { display: flex; flex-direction: column; gap: 16px; }
+
+    .timeline-header {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 12px 18px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-display);
+      font-size: 0.88rem;
+      font-weight: 700;
+      letter-spacing: 0.02em;
+      margin-bottom: 4px;
+    }
+    .timeline-header-a {
+      background: rgba(59,130,246,0.1);
+      border: 1px solid rgba(59,130,246,0.2);
+      color: var(--blue);
+    }
+    .timeline-header-b {
+      background: rgba(139,92,246,0.1);
+      border: 1px solid rgba(139,92,246,0.2);
+      color: var(--violet);
+    }
+
+    /* Individual outcome card */
+    .outcome-card {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-lg);
+      padding: 24px;
+      box-shadow: var(--shadow-card);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    .outcome-card.visible {
+      animation: card-in 0.5s ease forwards;
+    }
+    @keyframes card-in {
+      to { opacity:1; transform:translateY(0); }
+    }
+    .outcome-card:hover {
+      transform: translateY(-3px);
+      border-color: rgba(255,255,255,0.12);
+      box-shadow: var(--shadow-card), 0 16px 40px rgba(0,0,0,0.3);
+    }
+
+    .outcome-timeframe {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 0.65rem;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      padding: 4px 10px;
+      border-radius: 99px;
+      margin-bottom: 14px;
+    }
+    .tf-short { background: rgba(104,211,145,0.12); color: var(--green); border: 1px solid rgba(104,211,145,0.25); }
+    .tf-mid   { background: rgba(251,191,36,0.1);  color: #f6e05e;      border: 1px solid rgba(251,191,36,0.2); }
+    .tf-long  { background: rgba(252,129,129,0.1); color: var(--rose);  border: 1px solid rgba(252,129,129,0.2); }
+
+    .outcome-icon {
+      font-size: 1.4rem;
+      margin-bottom: 10px;
+      display: block;
+    }
+
+    .outcome-text {
+      font-size: 0.84rem;
+      color: var(--subtle);
+      line-height: 1.75;
+    }
+
+    /* Probability bar */
+    .prob-bar-wrap {
+      margin-top: 14px;
+      background: rgba(255,255,255,0.04);
+      border-radius: 99px;
+      height: 4px;
+      overflow: hidden;
+    }
+    .prob-bar {
+      height: 100%;
+      border-radius: 99px;
+      transition: width 1s cubic-bezier(0.4,0,0.2,1);
+    }
+    .prob-bar-a { background: linear-gradient(90deg, var(--blue), var(--cyan)); }
+    .prob-bar-b { background: linear-gradient(90deg, var(--violet), var(--blue)); }
+
+    .prob-label {
+      font-size: 0.62rem;
+      color: var(--muted);
+      margin-top: 6px;
+      letter-spacing: 0.06em;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       10. COMPARE SECTION
+    ═══════════════════════════════════════════════════════════════ */
+    .compare-section {
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 36px;
+      margin-bottom: 28px;
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    .compare-section.visible {
+      animation: card-in 0.5s 0.4s ease forwards;
+    }
+
+    .compare-title {
+      font-family: var(--font-display);
+      font-size: 1.1rem;
+      font-weight: 700;
+      letter-spacing: -0.01em;
+      margin-bottom: 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .compare-title::before {
+      content: '⚖';
+      font-size: 1.2rem;
+    }
+
+    .compare-grid {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr;
+      gap: 20px;
+      align-items: start;
+    }
+
+    .compare-col h4 {
+      font-size: 0.72rem;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      margin-bottom: 14px;
+    }
+    .compare-col-a h4 { color: var(--blue); }
+    .compare-col-b h4 { color: var(--violet); }
+
+    .compare-vs {
+      align-self: center;
+      font-family: var(--font-display);
+      font-size: 1.4rem;
+      font-weight: 800;
+      color: var(--muted);
+      text-align: center;
+    }
+
+    .compare-stat {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 10px;
+      font-size: 0.8rem;
+      color: var(--subtle);
+    }
+    .stat-dot {
+      width: 6px; height: 6px;
+      border-radius: 50%;
+      flex-shrink: 0;
+    }
+    .dot-a { background: var(--blue); }
+    .dot-b { background: var(--violet); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       11. ACTIONS ROW (Share, Reset)
+    ═══════════════════════════════════════════════════════════════ */
+    .actions-row {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
+      opacity: 0;
+      transform: translateY(16px);
+    }
+    .actions-row.visible { animation: card-in 0.5s 0.55s ease forwards; }
+
+    .action-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 12px 24px;
+      border-radius: var(--radius-md);
+      font-family: var(--font-mono);
+      font-size: 0.78rem;
+      letter-spacing: 0.06em;
+      cursor: pointer;
+      transition: all 0.2s;
+      border: 1px solid var(--border);
+    }
+
+    .btn-share {
+      background: var(--grad-a);
+      border: none;
+      color: #fff;
+      box-shadow: 0 4px 20px rgba(99,102,241,0.3);
+    }
+    .btn-share:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 28px rgba(99,102,241,0.45);
+    }
+
+    .btn-reset {
+      background: var(--glass);
+      color: var(--subtle);
+    }
+    .btn-reset:hover {
+      background: var(--glass-hover);
+      color: var(--text);
+      border-color: rgba(255,255,255,0.15);
+    }
+
+    /* Toast notification */
+    .toast {
+      position: fixed;
+      bottom: 32px;
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: rgba(15,23,42,0.95);
+      border: 1px solid var(--border-glow);
+      border-radius: var(--radius-md);
+      padding: 12px 24px;
+      font-size: 0.78rem;
+      color: var(--text);
+      letter-spacing: 0.04em;
+      backdrop-filter: blur(20px);
+      z-index: 999;
+      transition: transform 0.35s cubic-bezier(0.34,1.56,0.64,1);
+    }
+    .toast.show { transform: translateX(-50%) translateY(0); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       12. ABOUT MODAL
+    ═══════════════════════════════════════════════════════════════ */
+    .modal-overlay {
+      display: none;
+      position: fixed;
+      inset: 0;
+      background: rgba(0,0,0,0.7);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      align-items: center;
+      justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+
+    .modal {
+      background: #141d2f;
+      border: 1px solid var(--border);
+      border-radius: var(--radius-xl);
+      padding: 48px;
+      max-width: 480px;
+      width: 90%;
+      box-shadow: 0 32px 80px rgba(0,0,0,0.6);
+      animation: modal-in 0.35s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    @keyframes modal-in {
+      from { opacity:0; transform:scale(0.9) translateY(20px); }
+      to   { opacity:1; transform:scale(1) translateY(0); }
+    }
+
+    .modal h2 {
+      font-family: var(--font-display);
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      margin-bottom: 16px;
+      background: var(--grad-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+    .modal p {
+      font-size: 0.84rem;
+      color: var(--subtle);
+      line-height: 1.8;
+      margin-bottom: 12px;
+    }
+    .modal-close {
+      margin-top: 24px;
+      padding: 10px 20px;
+      background: var(--glass);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--subtle);
+      font-family: var(--font-mono);
+      font-size: 0.75rem;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .modal-close:hover { color: var(--text); border-color: rgba(255,255,255,0.15); }
+
+    /* ═══════════════════════════════════════════════════════════════
+       13. FOOTER
+    ═══════════════════════════════════════════════════════════════ */
+    footer {
+      position: relative;
+      z-index: 1;
+      text-align: center;
+      padding: 40px 24px;
+      border-top: 1px solid var(--border);
+      font-size: 0.72rem;
+      color: var(--muted);
+      letter-spacing: 0.06em;
+    }
+    footer span {
+      background: var(--grad-text);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      font-weight: 600;
+    }
+
+    /* ═══════════════════════════════════════════════════════════════
+       14. RESPONSIVE
+    ═══════════════════════════════════════════════════════════════ */
+    @media (max-width: 680px) {
+      nav { padding: 14px 20px; }
+      main { padding: 100px 16px 60px; }
+      .sim-card { padding: 24px; }
+      .options-row { grid-template-columns: 1fr; }
+      .timeline-grid { grid-template-columns: 1fr; }
+      .compare-grid {
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .compare-vs { display: none; }
+      .compare-section { padding: 24px; }
+      .modal { padding: 32px 24px; }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- ── Particle canvas & BG orbs ─────────────────────────────── -->
+  <canvas id="particle-canvas"></canvas>
+  <div class="bg-orb bg-orb-1"></div>
+  <div class="bg-orb bg-orb-2"></div>
+  <div class="bg-orb bg-orb-3"></div>
+
+  <!-- ── Navbar ─────────────────────────────────────────────────── -->
+  <nav>
+    <a class="nav-logo" href="#">Reality Check ✦</a>
+    <div class="nav-links">
+      <span class="nav-badge">Beta</span>
+      <a class="nav-link" href="#" onclick="openModal(); return false;">About</a>
+    </div>
+  </nav>
+
+  <!-- ── Main content ───────────────────────────────────────────── -->
+  <main>
+
+    <!-- Hero -->
+    <section class="hero">
+      <div class="hero-eyebrow">AI-Powered Foresight Engine</div>
+      <h1>See Where Your<br/>Decisions Take You</h1>
+      <p class="hero-sub">
+        Type your situation, label your choices, and simulate the future—
+        1 week, 6 months, and 5 years out.
+      </p>
+    </section>
+
+    <!-- Simulator form -->
+    <div class="sim-card" id="sim-form">
+
+      <!-- Situation input -->
+      <label class="field-label" for="situation">Your situation</label>
+      <textarea
+        id="situation"
+        class="situation-input"
+        placeholder="e.g. Should I study tonight or binge-watch that new series?"
+        rows="3"
+      ></textarea>
+
+      <!-- Options -->
+      <div class="options-row">
+        <div class="option-group">
+          <div class="option-label-tag option-a-tag">Option A</div>
+          <input
+            id="optionA"
+            class="option-input"
+            type="text"
+            placeholder="e.g. Study for 3 hours"
+          />
+        </div>
+        <div class="option-group">
+          <div class="option-label-tag option-b-tag">Option B</div>
+          <input
+            id="optionB"
+            class="option-input"
+            type="text"
+            placeholder="e.g. Watch the series"
+          />
+        </div>
+      </div>
+
+      <!-- CTA -->
+      <button class="simulate-btn" id="simulateBtn" onclick="handleSimulate()">
+        ⚡ Simulate My Future
+      </button>
+
+    </div>
+
+    <!-- Loading indicator -->
+    <div id="loading">
+      <div class="loader-ring"></div>
+      <p class="loader-text">Simulating your timeline<span class="loader-dots"></span></p>
+    </div>
+
+    <!-- Results -->
+    <section id="results">
+
+      <div class="results-header">
+        <h2 class="results-title">Your Simulated Futures</h2>
+        <p class="results-sub" id="results-context"></p>
+      </div>
+
+      <!-- Side-by-side timeline -->
+      <div class="timeline-grid">
+
+        <!-- Option A column -->
+        <div class="timeline-col">
+          <div class="timeline-header timeline-header-a">
+            <span>→</span>
+            <span id="header-a">Option A</span>
+          </div>
+          <!-- Outcomes injected by JS -->
+          <div id="cards-a"></div>
+        </div>
+
+        <!-- Option B column -->
+        <div class="timeline-col">
+          <div class="timeline-header timeline-header-b">
+            <span>→</span>
+            <span id="header-b">Option B</span>
+          </div>
+          <div id="cards-b"></div>
+        </div>
+
+      </div>
+
+      <!-- Compare section -->
+      <div class="compare-section" id="compare-section">
+        <h3 class="compare-title">Compare Both Choices</h3>
+        <div class="compare-grid">
+          <div class="compare-col compare-col-a" id="compare-a"></div>
+          <div class="compare-vs">VS</div>
+          <div class="compare-col compare-col-b" id="compare-b"></div>
+        </div>
+      </div>
+
+      <!-- Action buttons -->
+      <div class="actions-row" id="actions-row">
+        <button class="action-btn btn-share" onclick="shareResult()">
+          ↗ Share this result
+        </button>
+        <button class="action-btn btn-reset" onclick="resetSim()">
+          ↺ Try another decision
+        </button>
+      </div>
+
+    </section>
+
+  </main>
+
+  <!-- ── Footer ──────────────────────────────────────────────────── -->
+  <footer>
+    <span>Reality Check</span> &nbsp;·&nbsp; Built for smarter decisions &nbsp;·&nbsp; 2025
+  </footer>
+
+  <!-- ── About Modal ─────────────────────────────────────────────── -->
+  <div class="modal-overlay" id="modal-overlay" onclick="closeModal(event)">
+    <div class="modal">
+      <h2>About Reality Check</h2>
+      <p>
+        Reality Check is a decision-simulation tool that helps you visualise
+        the probable outcomes of your choices across three time horizons:
+        short-term, mid-term, and long-term.
+      </p>
+      <p>
+        The simulator is designed to plug into any AI backend (OpenAI, Anthropic, etc.)
+        via the <code style="color:var(--blue);font-size:0.8em">simulateDecision()</code> function.
+        Currently running with a smart placeholder engine.
+      </p>
+      <p>
+        Best used as a journalling prompt, a pre-decision sanity check, or
+        a thinking tool—not a crystal ball.
+      </p>
+      <button class="modal-close" onclick="closeModal()">Close</button>
+    </div>
+  </div>
+
+  <!-- ── Toast ───────────────────────────────────────────────────── -->
+  <div class="toast" id="toast"></div>
+
+  <script>
+    /* ═══════════════════════════════════════════════════════════════
+       PARTICLE BACKGROUND
+       Lightweight canvas particle system — no libraries.
+    ═══════════════════════════════════════════════════════════════ */
+    (function initParticles() {
+      const canvas = document.getElementById('particle-canvas');
+      const ctx = canvas.getContext('2d');
+      let particles = [];
+      const PARTICLE_COUNT = 70;
+
+      function resize() {
+        canvas.width  = window.innerWidth;
+        canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resize);
+      resize();
+
+      // Particle factory
+      function makeParticle() {
+        return {
+          x:  Math.random() * canvas.width,
+          y:  Math.random() * canvas.height,
+          r:  Math.random() * 1.5 + 0.3,
+          dx: (Math.random() - 0.5) * 0.3,
+          dy: (Math.random() - 0.5) * 0.3,
+          // Colour oscillates between blue and violet hues
+          hue: Math.random() * 60 + 200,
+          alpha: Math.random() * 0.4 + 0.1,
+        };
+      }
+
+      for (let i = 0; i < PARTICLE_COUNT; i++) particles.push(makeParticle());
+
+      function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        particles.forEach(p => {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fillStyle = `hsla(${p.hue}, 80%, 70%, ${p.alpha})`;
+          ctx.fill();
+
+          // Move
+          p.x += p.dx;
+          p.y += p.dy;
+
+          // Wrap around edges
+          if (p.x < 0) p.x = canvas.width;
+          if (p.x > canvas.width) p.x = 0;
+          if (p.y < 0) p.y = canvas.height;
+          if (p.y > canvas.height) p.y = 0;
+        });
+
+        // Draw faint connection lines between nearby particles
+        for (let i = 0; i < particles.length; i++) {
+          for (let j = i + 1; j < particles.length; j++) {
+            const dx = particles[i].x - particles[j].x;
+            const dy = particles[i].y - particles[j].y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+            if (dist < 100) {
+              ctx.beginPath();
+              ctx.moveTo(particles[i].x, particles[i].y);
+              ctx.lineTo(particles[j].x, particles[j].y);
+              ctx.strokeStyle = `rgba(99,179,237,${0.06 * (1 - dist/100)})`;
+              ctx.lineWidth = 0.5;
+              ctx.stroke();
+            }
+          }
+        }
+
+        requestAnimationFrame(draw);
+      }
+      draw();
+    })();
+
+
+    /* ═══════════════════════════════════════════════════════════════
+       SIMULATION ENGINE
+       ─────────────────────────────────────────────────────────────
+       HOW TO PLUG IN OpenAI (or any LLM):
+       Replace the body of simulateDecision() with a fetch() call
+       to your backend or directly to the OpenAI API, e.g.:
+
+       async function simulateDecision(situation, option) {
+         const res = await fetch('https://api.openai.com/v1/chat/completions', {
+           method: 'POST',
+           headers: {
+             'Authorization': 'Bearer YOUR_KEY',
+             'Content-Type': 'application/json',
+           },
+           body: JSON.stringify({
+             model: 'gpt-4o',
+             messages: [{
+               role: 'user',
+               content: buildPrompt(situation, option)
+             }]
+           })
+         });
+         const data = await res.json();
+         return parseResponse(data.choices[0].message.content);
+       }
+
+       The returned object must match:
+       { short, mid, long, comparePoints }
+    ═══════════════════════════════════════════════════════════════ */
+
+    // ── Scenario data (placeholder) ──────────────────────────────
+    const SCENARIO_POOL = {
+      positive: {
+        short:   [
+          "You feel a small but real surge of momentum. The first step is done and your brain starts to connect effort with identity.",
+          "Productivity spikes. You knock out more in the next 48 hours than you expected, riding an unexpected wave of clarity.",
+          "A tiny win compounds: you sleep better, wake earlier, and the next day feels lighter than usual.",
+        ],
+        mid:     [
+          "Six months in, the habit has quietly hardened into character. You barely remember when it felt like a sacrifice.",
+          "People around you notice something different—not dramatic, just a steady reliability that wasn't there before.",
+          "Progress is uneven but undeniable. The gap between who you were and who you're becoming is measurable now.",
+        ],
+        long:    [
+          "Five years later this decision is a footnote to who you became. The trajectory it started is now just your life.",
+          "What felt like discipline early on is now identity. You can barely imagine not having made this call.",
+          "You've compounded quietly. The results aren't flashy; they're structural—deep roots, real resilience.",
+        ],
+      },
+      negative: {
+        short:   [
+          "Relief is immediate. The pressure dissolves for a few hours and it feels like the right move—for now.",
+          "The short-term feels fine. Nothing visibly breaks. The cost is invisible, deferred somewhere down the line.",
+          "You get what you wanted in the moment, but a faint background noise of 'I'll deal with this later' settles in.",
+        ],
+        mid:     [
+          "Six months out the pattern has solidified. What started as one choice has quietly become the default.",
+          "The midpoint arrives and the gap between where you are and where you planned to be is hard to ignore.",
+          "Opportunities that needed groundwork you didn't lay have started passing by. Not catastrophically—just quietly.",
+        ],
+        long:    [
+          "Five years on, the compounded weight of this pattern is tangible. It's not irreversible, but reversing it now takes real effort.",
+          "The choice became a lifestyle. Whether that's a problem depends entirely on whether you're honest with yourself about the tradeoff.",
+          "You look back and see the fork clearly. The other path didn't disappear—it just got longer to walk back to.",
+        ],
+      },
+    };
+
+    // Randomly assign positive/negative slant to A and B for variety
+    function pickSlant() {
+      return Math.random() > 0.45 ? 'positive' : 'negative';
+    }
+
+    function pickRandom(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    /**
+     * simulateDecision(situation, option)
+     * Returns a promise that resolves to { short, mid, long, comparePoints }
+     * REPLACE THIS with your real AI call when ready.
+     */
+    async function simulateDecision(situation, option) {
+      // Simulate network latency for realism
+      await new Promise(r => setTimeout(r, 800 + Math.random() * 600));
+
+      const slant = pickSlant();
+      const pool  = SCENARIO_POOL[slant];
+
+      return {
+        short:  pickRandom(pool.short),
+        mid:    pickRandom(pool.mid),
+        long:   pickRandom(pool.long),
+        slant:  slant,
+        comparePoints: slant === 'positive'
+          ? ['Builds momentum', 'Lower regret risk', 'Aligns with future-you']
+          : ['Short-term relief', 'Lower immediate effort', 'Maintains current comfort'],
+      };
+    }
+
+
+    /* ═══════════════════════════════════════════════════════════════
+       UI ORCHESTRATION
+    ═══════════════════════════════════════════════════════════════ */
+
+    let currentResults = null; // Store for share functionality
+
+    async function handleSimulate() {
+      const situation = document.getElementById('situation').value.trim();
+      const optA      = document.getElementById('optionA').value.trim() || 'Option A';
+      const optB      = document.getElementById('optionB').value.trim() || 'Option B';
+
+      // Validate
+      if (!situation) {
+        showToast('⚠ Please describe your situation first.');
+        document.getElementById('situation').focus();
+        return;
+      }
+
+      // Lock button, hide form, show loader
+      const btn = document.getElementById('simulateBtn');
+      btn.disabled = true;
+      btn.textContent = '⏳ Simulating...';
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('loading').style.display  = 'block';
+
+      try {
+        // Run both simulations in parallel
+        const [resA, resB] = await Promise.all([
+          simulateDecision(situation, optA),
+          simulateDecision(situation, optB),
+        ]);
+
+        currentResults = { situation, optA, optB, resA, resB };
+        renderResults(situation, optA, optB, resA, resB);
+
+      } catch (err) {
+        showToast('❌ Simulation failed. Please try again.');
+        console.error(err);
+      } finally {
+        document.getElementById('loading').style.display = 'none';
+        btn.disabled = false;
+        btn.textContent = '⚡ Simulate My Future';
+      }
+    }
+
+    function renderResults(situation, optA, optB, resA, resB) {
+      // Header labels
+      document.getElementById('header-a').textContent = optA;
+      document.getElementById('header-b').textContent = optB;
+      document.getElementById('results-context').textContent =
+        `"${situation}"`;
+
+      // Build outcome cards for A and B
+      document.getElementById('cards-a').innerHTML = buildCards(resA, 'a');
+      document.getElementById('cards-b').innerHTML = buildCards(resB, 'b');
+
+      // Compare section
+      buildCompare(optA, optB, resA, resB);
+
+      // Show results
+      document.getElementById('results').style.display = 'block';
+
+      // Stagger card animations
+      requestAnimationFrame(() => {
+        document.querySelectorAll('.outcome-card, .compare-section, .actions-row')
+          .forEach((el, i) => {
+            setTimeout(() => el.classList.add('visible'), i * 80);
+            // Animate probability bars
+            const bar = el.querySelector('.prob-bar');
+            if (bar) {
+              const pct = bar.dataset.pct;
+              setTimeout(() => bar.style.width = pct + '%', i * 80 + 300);
+            }
+          });
+      });
+
+      // Scroll to results
+      document.getElementById('results').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+
+    function buildCards(res, side) {
+      const timeframes = [
+        { key: 'short', label: '1 Week',   cls: 'tf-short', icon: '🌱', pct: 72 },
+        { key: 'mid',   label: '6 Months', cls: 'tf-mid',   icon: '🔭', pct: 58 },
+        { key: 'long',  label: '5 Years',  cls: 'tf-long',  icon: '🏔', pct: 41 },
+      ];
+
+      return timeframes.map(tf => `
+        <div class="outcome-card">
+          <div class="outcome-timeframe ${tf.cls}">
+            ${tf.icon} ${tf.label}
+          </div>
+          <p class="outcome-text">${res[tf.key]}</p>
+          <div class="prob-bar-wrap">
+            <div
+              class="prob-bar prob-bar-${side}"
+              style="width:0%"
+              data-pct="${tf.pct + Math.floor(Math.random()*18 - 9)}"
+            ></div>
+          </div>
+          <div class="prob-label">Confidence signal</div>
+        </div>
+      `).join('');
+    }
+
+    function buildCompare(optA, optB, resA, resB) {
+      const buildCol = (label, points, cls, dotCls) => `
+        <h4>${label}</h4>
+        ${points.map(p => `
+          <div class="compare-stat">
+            <div class="stat-dot ${dotCls}"></div>
+            ${p}
+          </div>
+        `).join('')}
+      `;
+
+      document.getElementById('compare-a').innerHTML =
+        buildCol(optA, resA.comparePoints, 'compare-col-a', 'dot-a');
+      document.getElementById('compare-b').innerHTML =
+        buildCol(optB, resB.comparePoints, 'compare-col-b', 'dot-b');
+    }
+
+    function resetSim() {
+      document.getElementById('results').style.display = 'none';
+      document.getElementById('situation').value = '';
+      document.getElementById('optionA').value = '';
+      document.getElementById('optionB').value = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+      // Remove animation classes for re-use
+      document.querySelectorAll('.outcome-card, .compare-section, .actions-row')
+        .forEach(el => el.classList.remove('visible'));
+      currentResults = null;
+    }
+
+    function shareResult() {
+      if (!currentResults) return;
+      const { situation, optA, optB } = currentResults;
+      const shareText = `🔮 Reality Check Simulation\n\n"${situation}"\n\nOption A: ${optA}\nOption B: ${optB}\n\nSimulate yours → ${window.location.href}`;
+
+      if (navigator.share) {
+        navigator.share({ title: 'Reality Check', text: shareText })
+          .catch(() => copyToClipboard(shareText));
+      } else {
+        copyToClipboard(shareText);
+      }
+    }
+
+    function copyToClipboard(text) {
+      navigator.clipboard.writeText(text)
+        .then(() => showToast('✓ Link copied to clipboard!'))
+        .catch(() => showToast('⚠ Could not copy — try manually.'));
+    }
+
+
+    /* ═══════════════════════════════════════════════════════════════
+       TOAST
+    ═══════════════════════════════════════════════════════════════ */
+    let toastTimeout;
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      toast.textContent = msg;
+      toast.classList.add('show');
+      clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => toast.classList.remove('show'), 3000);
+    }
+
+
+    /* ═══════════════════════════════════════════════════════════════
+       MODAL
+    ═══════════════════════════════════════════════════════════════ */
+    function openModal() {
+      document.getElementById('modal-overlay').classList.add('open');
+    }
+    function closeModal(e) {
+      if (!e || e.target === document.getElementById('modal-overlay')) {
+        document.getElementById('modal-overlay').classList.remove('open');
+      }
+    }
+    // Close modal on Escape key
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeModal({ target: document.getElementById('modal-overlay') });
+    });
+
+    // Allow Enter key on Simulate button
+    document.getElementById('situation').addEventListener('keydown', e => {
+      if (e.key === 'Enter' && e.ctrlKey) handleSimulate();
+    });
+
+  </script>
+</body>
+</html>
